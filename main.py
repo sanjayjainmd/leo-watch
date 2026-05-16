@@ -45,50 +45,32 @@ def load_week_data() -> list[dict]:
     return all_data
 
 
+def scrape(label: str, fn, *args, **kwargs) -> list[dict]:
+    """Run a scraper, catch errors so one failure doesn't kill the whole run."""
+    try:
+        print(f"  → {label}...")
+        results = fn(*args, **kwargs)
+        print(f"     {len(results)} items")
+        return results
+    except Exception as e:
+        print(f"     WARNING: {label} failed — {e}")
+        return []
+
+
 def run_daily():
     print(f"[{datetime.utcnow()}] Running daily scrape...")
     all_data = []
 
-    print("  → Twitter...")
-    tweets = fetch_tweets(APIFY_KEY, since_hours=24)
-    all_data.extend(tweets)
-    print(f"     {len(tweets)} tweets")
+    all_data += scrape("Twitter", fetch_tweets, APIFY_KEY, since_hours=24)
+    all_data += scrape("Reddit", fetch_reddit, APIFY_KEY, since_hours=24)
+    all_data += scrape("Hacker News", fetch_hackernews, since_hours=24)
+    all_data += scrape("Google News", fetch_news, since_hours=24)
+    all_data += scrape("SEC EDGAR", fetch_recent_filings, since_days=1)
+    all_data += scrape("ArXiv", fetch_arxiv, since_days=1)
+    all_data += scrape("YouTube", fetch_youtube, APIFY_KEY, since_days=1)
+    all_data += scrape("LinkedIn", fetch_linkedin, APIFY_KEY)
 
-    print("  → Reddit...")
-    reddit = fetch_reddit(APIFY_KEY, since_hours=24)
-    all_data.extend(reddit)
-    print(f"     {len(reddit)} posts")
-
-    print("  → Hacker News...")
-    hn = fetch_hackernews(since_hours=24)
-    all_data.extend(hn)
-    print(f"     {len(hn)} items")
-
-    print("  → Google News...")
-    news = fetch_news(since_hours=24)
-    all_data.extend(news)
-    print(f"     {len(news)} articles")
-
-    print("  → SEC EDGAR...")
-    sec = fetch_recent_filings(since_days=1)
-    all_data.extend(sec)
-    print(f"     {len(sec)} filings")
-
-    print("  → ArXiv...")
-    arxiv = fetch_arxiv(since_days=1)
-    all_data.extend(arxiv)
-    print(f"     {len(arxiv)} papers")
-
-    print("  → YouTube...")
-    youtube = fetch_youtube(APIFY_KEY, since_days=1)
-    all_data.extend(youtube)
-    print(f"     {len(youtube)} videos")
-
-    print("  → LinkedIn...")
-    linkedin = fetch_linkedin(APIFY_KEY)
-    all_data.extend(linkedin)
-    print(f"     {len(linkedin)} posts")
-
+    print(f"  Total items collected: {len(all_data)}")
     save_data(all_data, "daily")
 
     print("  → Synthesizing with Claude...")
@@ -103,36 +85,18 @@ def run_daily():
 def run_weekly():
     print(f"[{datetime.utcnow()}] Running weekly deep dive...")
 
-    # First run the daily scrape with 7-day window for fresh data
-    print("  → Twitter (7 days)...")
-    tweets = fetch_tweets(APIFY_KEY, since_hours=168)
+    fresh = []
+    fresh += scrape("Twitter (7d)", fetch_tweets, APIFY_KEY, since_hours=168)
+    fresh += scrape("Reddit (7d)", fetch_reddit, APIFY_KEY, since_hours=168)
+    fresh += scrape("Substack (7d)", fetch_substack, since_hours=168)
+    fresh += scrape("YouTube (7d)", fetch_youtube, APIFY_KEY, since_days=7)
+    fresh += scrape("SEC EDGAR (7d)", fetch_recent_filings, since_days=7)
+    fresh += scrape("ArXiv (7d)", fetch_arxiv, since_days=7)
+    fresh += scrape("Hacker News (7d)", fetch_hackernews, since_hours=168)
+    fresh += scrape("Google News (7d)", fetch_news, since_hours=168)
 
-    print("  → Reddit (7 days)...")
-    reddit = fetch_reddit(APIFY_KEY, since_hours=168)
-
-    print("  → Substack (7 days)...")
-    substack = fetch_substack(since_hours=168)
-
-    print("  → YouTube (7 days)...")
-    youtube = fetch_youtube(APIFY_KEY, since_days=7)
-
-    print("  → SEC EDGAR (7 days)...")
-    sec = fetch_recent_filings(since_days=7)
-
-    print("  → ArXiv (7 days)...")
-    arxiv = fetch_arxiv(since_days=7)
-
-    print("  → Hacker News (7 days)...")
-    hn = fetch_hackernews(since_hours=168)
-
-    print("  → Google News (7 days)...")
-    news = fetch_news(since_hours=168)
-
-    # Combine fresh + stored daily data
-    fresh = tweets + reddit + substack + youtube + sec + arxiv + hn + news
     stored = load_week_data()
     all_data = fresh + stored
-
     save_data(fresh, "weekly_fresh")
 
     print(f"  → Synthesizing {len(all_data)} total items with Claude...")
