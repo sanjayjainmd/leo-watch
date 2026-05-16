@@ -1,0 +1,37 @@
+name: The Leo Deep Dive (Weekly)
+
+on:
+  schedule:
+    # 6pm ET Sunday (23:00 UTC)
+    - cron: "0 23 * * 0"
+  workflow_dispatch:  # allow manual trigger
+
+jobs:
+  run-weekly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run weekly deep dive
+        env:
+          APIFY_API_KEY: ${{ secrets.APIFY_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+        run: python main.py weekly
+
+      - name: Save data to repo
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-data-${{ github.run_id }}
+          path: data/
+          retention-days: 90

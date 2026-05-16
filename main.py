@@ -1,0 +1,152 @@
+import os
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from scraper.twitter import fetch_tweets
+from scraper.reddit import fetch_reddit
+from scraper.youtube import fetch_youtube
+from scraper.linkedin import fetch_linkedin
+from scraper.hackernews import fetch_hackernews
+from scraper.news import fetch_news
+from scraper.substack import fetch_substack
+from scraper.sec_edgar import fetch_recent_filings
+from scraper.arxiv import fetch_arxiv
+from synthesize import build_daily_brief, build_weekly_report
+from emailer.send import send_email
+
+APIFY_KEY = os.environ["APIFY_API_KEY"]
+ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
+SENDER_EMAIL = os.environ["SENDER_EMAIL"]
+SENDER_PASSWORD = os.environ["SENDER_PASSWORD"]
+RECIPIENT_EMAIL = os.environ["RECIPIENT_EMAIL"]
+
+DATA_DIR = Path("data")
+DATA_DIR.mkdir(exist_ok=True)
+
+
+def save_data(data: list[dict], label: str) -> None:
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    path = DATA_DIR / f"{ts}_{label}.json"
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2, default=str)
+    print(f"Saved {len(data)} items → {path}")
+
+
+def load_week_data() -> list[dict]:
+    all_data = []
+    for path in sorted(DATA_DIR.glob("*.json"))[-14:]:  # last ~7 days of files
+        with open(path) as f:
+            all_data.extend(json.load(f))
+    return all_data
+
+
+def run_daily():
+    print(f"[{datetime.utcnow()}] Running daily scrape...")
+    all_data = []
+
+    print("  → Twitter...")
+    tweets = fetch_tweets(APIFY_KEY, since_hours=24)
+    all_data.extend(tweets)
+    print(f"     {len(tweets)} tweets")
+
+    print("  → Reddit...")
+    reddit = fetch_reddit(APIFY_KEY, since_hours=24)
+    all_data.extend(reddit)
+    print(f"     {len(reddit)} posts")
+
+    print("  → Hacker News...")
+    hn = fetch_hackernews(since_hours=24)
+    all_data.extend(hn)
+    print(f"     {len(hn)} items")
+
+    print("  → Google News...")
+    news = fetch_news(since_hours=24)
+    all_data.extend(news)
+    print(f"     {len(news)} articles")
+
+    print("  → SEC EDGAR...")
+    sec = fetch_recent_filings(since_days=1)
+    all_data.extend(sec)
+    print(f"     {len(sec)} filings")
+
+    print("  → ArXiv...")
+    arxiv = fetch_arxiv(since_days=1)
+    all_data.extend(arxiv)
+    print(f"     {len(arxiv)} papers")
+
+    print("  → YouTube...")
+    youtube = fetch_youtube(APIFY_KEY, since_days=1)
+    all_data.extend(youtube)
+    print(f"     {len(youtube)} videos")
+
+    print("  → LinkedIn...")
+    linkedin = fetch_linkedin(APIFY_KEY)
+    all_data.extend(linkedin)
+    print(f"     {len(linkedin)} posts")
+
+    save_data(all_data, "daily")
+
+    print("  → Synthesizing with Claude...")
+    brief = build_daily_brief(all_data, ANTHROPIC_KEY)
+
+    date_str = datetime.now(timezone.utc).strftime("%a %b %d")
+    subject = f"The Leo Brief — {date_str}"
+    send_email(subject, brief, RECIPIENT_EMAIL, SENDER_EMAIL, SENDER_PASSWORD)
+    print("  Done.")
+
+
+def run_weekly():
+    print(f"[{datetime.utcnow()}] Running weekly deep dive...")
+
+    # First run the daily scrape with 7-day window for fresh data
+    print("  → Twitter (7 days)...")
+    tweets = fetch_tweets(APIFY_KEY, since_hours=168)
+
+    print("  → Reddit (7 days)...")
+    reddit = fetch_reddit(APIFY_KEY, since_hours=168)
+
+    print("  → Substack (7 days)...")
+    substack = fetch_substack(since_hours=168)
+
+    print("  → YouTube (7 days)...")
+    youtube = fetch_youtube(APIFY_KEY, since_days=7)
+
+    print("  → SEC EDGAR (7 days)...")
+    sec = fetch_recent_filings(since_days=7)
+
+    print("  → ArXiv (7 days)...")
+    arxiv = fetch_arxiv(since_days=7)
+
+    print("  → Hacker News (7 days)...")
+    hn = fetch_hackernews(since_hours=168)
+
+    print("  → Google News (7 days)...")
+    news = fetch_news(since_hours=168)
+
+    # Combine fresh + stored daily data
+    fresh = tweets + reddit + substack + youtube + sec + arxiv + hn + news
+    stored = load_week_data()
+    all_data = fresh + stored
+
+    save_data(fresh, "weekly_fresh")
+
+    print(f"  → Synthesizing {len(all_data)} total items with Claude...")
+    report = build_weekly_report(all_data, ANTHROPIC_KEY)
+
+    week_str = datetime.now(timezone.utc).strftime("Week of %b %d, %Y")
+    subject = f"The Leo Deep Dive — {week_str}"
+    send_email(subject, report, RECIPIENT_EMAIL, SENDER_EMAIL, SENDER_PASSWORD)
+    print("  Done.")
+
+
+if __name__ == "__main__":
+    mode = sys.argv[1] if len(sys.argv) > 1 else "daily"
+    if mode == "weekly":
+        run_weekly()
+    else:
+        run_daily()
