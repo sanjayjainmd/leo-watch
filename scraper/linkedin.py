@@ -30,6 +30,6 @@ def fetch_linkedin(api_key: str) -> list[dict]:
                     "keyword": keyword,
                 })
         except Exception as e:
-            print(f"LinkedIn scraper failed for '{keyword}': {e}")
+            print(f"WARNING: LinkedIn scraper failed for '{keyword}' — {e}")
             continue
     return results
