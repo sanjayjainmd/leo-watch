@@ -3,19 +3,9 @@ from apify_client import ApifyClient
 from datetime import datetime, timedelta
 
 HANDLES = [
-    "leopoldasch",
-    "karpathy",
-    "sama",
-    "ESYudkowsky",
-    "DarioAmodei",
-    "demishassabis",
-    "pmarca",
-    "nathanbenaich",
-    "DavidCahn6",
-    "GaryMarcus",
-    "robbensinger",
-    "scottaaronson",
-    "TheZvi",
+    "leopoldasch", "karpathy", "sama", "ESYudkowsky",
+    "DarioAmodei", "demishassabis", "pmarca", "nathanbenaich",
+    "DavidCahn6", "GaryMarcus", "robbensinger", "scottaaronson", "TheZvi",
 ]
 
 def fetch_tweets(api_key: str, since_hours: int = 24) -> list[dict]:
@@ -40,5 +30,5 @@ def fetch_tweets(api_key: str, since_hours: int = 24) -> list[dict]:
                 "retweets": item.get("retweetCount", 0),
             })
     except Exception as e:
-        print(f"Twitter scraper failed: {e}")
+        print(f"WARNING: Twitter scraper failed — {e}")
     return results
