@@ -1,9 +1,9 @@
-name: The Leo Brief (Daily)
+name: The Leo Brief (Weekly)
 
 on:
   schedule:
-    # 7am ET Mon-Fri (12:00 UTC)
-    - cron: "0 12 * * 1-5"
+    # 7am ET Monday (12:00 UTC)
+    - cron: "0 12 * * 1"
   workflow_dispatch:  # allow manual trigger
 
 jobs:
